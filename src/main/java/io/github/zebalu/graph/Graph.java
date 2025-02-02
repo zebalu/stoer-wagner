@@ -124,8 +124,10 @@ public class Graph<T> {
     }
 
     public static class StoerWagner<T> {
-        private final Graph<Set<T>> workingGraph = new Graph<>();
+        private final Graph<Integer> workingGraph = new Graph<>();
         private final Graph<T> originalGraph;
+        private final Map<Integer, Set<T>> intToSet = new HashMap<>();
+        private final Map<Set<T>, Integer> setToInt = new HashMap<>();
         private Set<T> bestCut;
         private double bestWeight = Double.MAX_VALUE;
         private final Graph<T> partition1 = new Graph<>();
@@ -137,13 +139,14 @@ public class Graph<T> {
             Map<T, Set<T>> helper = new HashMap<>();
             graph.getVertices().forEach(vertex -> {
                 Set<T> set = new HashSet<>(Set.of(vertex));
+                int id = registerSet(set);
                 helper.put(vertex, set);
-                workingGraph.addVertex(set);
+                workingGraph.addVertex(id);
             });
             graph.getEdges().forEach(edge -> {
                 Set<T> from = helper.get(edge.getFrom());
                 Set<T> to = helper.get(edge.getTo());
-                workingGraph.addEdge(from, to, edge.getWeight());
+                workingGraph.addEdge(setToInt.get(from), setToInt.get(to), edge.getWeight());
             });
             findBestCut();
             buildPartitions();
@@ -171,20 +174,26 @@ public class Graph<T> {
             }
         }
 
+        private int registerSet(Set<T> set) {
+            int id = setToInt.computeIfAbsent(set, s->setToInt.size());
+            intToSet.put(id, set);
+            return id;
+        }
+
         private void minCutPhase() {
-            record VertexCost<T>(Set<T> vertex, double cost) { }
-            Map<Set<T>, VertexCost<T>> costMap = new HashMap<>();
-            Set<T> stratVertex = workingGraph.getVertices().iterator().next();
-            VertexCost<T> startCost = new VertexCost<>(stratVertex, 0.0);
+            record VertexCost(int vertex, double cost) { }
+            Map<Integer, VertexCost> costMap = new HashMap<>();
+            int stratVertex = workingGraph.getVertices().iterator().next();
+            VertexCost startCost = new VertexCost(stratVertex, 0.0);
             costMap.put(stratVertex, startCost);
-            SequencedSet<VertexCost<T>> queue = new TreeSet<>(Comparator.<VertexCost<T>>comparingDouble(VertexCost::cost).reversed());
+            SequencedSet<VertexCost> queue = new TreeSet<>(Comparator.<VertexCost>comparingDouble(VertexCost::cost).reversed());
             queue.add(startCost);
-            Set<T> last = null;
-            Set<T> beforeLast = null;
-            Set<Set<T>> processed = new HashSet<>();
+            int last = -1;
+            int beforeLast = -1;
+            Set<Integer> processed = new HashSet<>();
             double lastSumWeight = Double.MIN_VALUE;
             while (!queue.isEmpty() && !costMap.isEmpty()) {
-                VertexCost<T> vc = queue.removeFirst();
+                VertexCost vc = queue.removeFirst();
                 processed.add(vc.vertex());
                 beforeLast = last;
                 last = vc.vertex();
@@ -193,8 +202,8 @@ public class Graph<T> {
                 for (var edge : workingGraph.getEdgesOf(vc.vertex())) {
                     var other = edge.getOther(vc.vertex());
                     if (!processed.contains(other)) {
-                        var currWeight = costMap.getOrDefault(other, new VertexCost<>(other, 0.0));
-                        VertexCost<T> nextWeight = new VertexCost<>(other, currWeight.cost() + edge.getWeight());
+                        var currWeight = costMap.getOrDefault(other, new VertexCost(other, 0.0));
+                        VertexCost nextWeight = new VertexCost(other, currWeight.cost() + edge.getWeight());
                         queue.remove(currWeight);
                         queue.add(nextWeight);
                         costMap.put(other, nextWeight);
@@ -203,27 +212,31 @@ public class Graph<T> {
             }
             if (lastSumWeight < bestWeight) {
                 bestWeight = lastSumWeight;
-                bestCut = last;
+                bestCut = intToSet.get(last);
             }
             merge(beforeLast, last);
         }
 
-        private void merge(Set<T> beforeLast, Set<T> last) {
-            Set<T> merged = new HashSet<>(beforeLast);
-            merged.addAll(last);
-            Map<Set<T>, Double> sumMap = new HashMap<>();
+        private void merge(int beforeLast, int last) {
+            Set<T> lastSet = intToSet.get(last);
+            Set<T> beforeSet = intToSet.get(beforeLast);
+            Set<T> merged = HashSet.newHashSet(lastSet.size()+beforeSet.size());
+            merged.addAll(lastSet);
+            merged.addAll(beforeSet);
+            int newId = registerSet(merged);
+            Map<Integer, Double> sumMap = new HashMap<>();
             sumWeights(beforeLast, last, sumMap);
             sumWeights(last, beforeLast, sumMap);
             workingGraph.removeVertex(beforeLast);
             workingGraph.removeVertex(last);
-            workingGraph.addVertex(merged);
-            sumMap.forEach((key, value) -> workingGraph.addEdge(merged, key, value));
+            workingGraph.addVertex(newId);
+            sumMap.forEach((key, value) -> workingGraph.addEdge(newId, key, value));
         }
 
-        private void sumWeights(Set<T> from, Set<T> not, Map<Set<T>, Double> sumMap) {
+        private void sumWeights(int from, int not, Map<Integer, Double> sumMap) {
             for (var edge : workingGraph.getEdgesOf(from)) {
-                Set<T> other = edge.getOther(from);
-                if (!other.equals(not)) {
+                int other = edge.getOther(from);
+                if (other != not) {
                     sumMap.compute(other, (k, v) -> edge.getWeight() + (v != null ? v : 0.0));
                 }
             }
