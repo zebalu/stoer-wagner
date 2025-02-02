@@ -94,7 +94,7 @@ public class Graph<T> {
 
     public void removeVertex(T vertex) {
         List<Edge<T>> toProcess = new ArrayList<>(edgeMap.get(vertex));
-        for(var edge: toProcess) {
+        for (var edge : toProcess) {
             T other = edge.getOther(vertex);
             vertexMap.get(other).remove(vertex);
             edgeMap.get(other).remove(edge);
@@ -175,13 +175,14 @@ public class Graph<T> {
         }
 
         private int registerSet(Set<T> set) {
-            int id = setToInt.computeIfAbsent(set, s->setToInt.size());
+            int id = setToInt.computeIfAbsent(set, s -> setToInt.size());
             intToSet.put(id, set);
             return id;
         }
 
         private void minCutPhase() {
-            record VertexCost(int vertex, double cost) { }
+            record VertexCost(int vertex, double cost) {
+            }
             Map<Integer, VertexCost> costMap = new HashMap<>();
             int stratVertex = workingGraph.getVertices().iterator().next();
             VertexCost startCost = new VertexCost(stratVertex, 0.0);
@@ -220,7 +221,7 @@ public class Graph<T> {
         private void merge(int beforeLast, int last) {
             Set<T> lastSet = intToSet.get(last);
             Set<T> beforeSet = intToSet.get(beforeLast);
-            Set<T> merged = HashSet.newHashSet(lastSet.size()+beforeSet.size());
+            Set<T> merged = HashSet.newHashSet(lastSet.size() + beforeSet.size());
             merged.addAll(lastSet);
             merged.addAll(beforeSet);
             int newId = registerSet(merged);
